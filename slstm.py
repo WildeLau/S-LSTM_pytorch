@@ -31,6 +31,11 @@ class sLSTMCell(nn.Module):
     Outputs: (h_1, c_1)
         --h_1: (seq_len+sentence_nodes, batch, hidden_size)
         --c_1: (seq_len+sentence_nodes, batch, hidden_size)
+
+    TODO:
+        处理bias=False, batch_first=False, 将sequence_mask
+        设置成不需要self的方法，处理多个sentence node，处理多个window_size,支持更多
+        初始化方法，处理dropout
     """
 
     def __init__(self, input_size, hidden_size, window_size=1,
@@ -45,6 +50,9 @@ class sLSTMCell(nn.Module):
         self.bias = bias
         self.batch_first = batch_first
         self.dropout = dropout
+        self.lens_dim = 1 if batch_first is True else 0
+
+        self.sent_w = nn.Linear(hidden_size, )
 
         self._all_gate_weights = []
         # parameters for word nodes
@@ -99,77 +107,75 @@ class sLSTMCell(nn.Module):
             for weight in self.parameters():
                 weight.data.uniform_(-stdv, stdv)
 
-    def get_seq_mask(self, size, length):
+    def sequence_mask(self, size, length):
         # batch_first = False mode
         mask = Variable(torch.zeros(size[0], size[1], 1), requires_grad=False)
         for i in range(size[0]):
-            mask[i, :, :] = mask[i, :, :] + (i < length).float()
-        return mask
+            mask[i, :, :] = mask[i, :, :] + (i >= length).float()
+        return mask.byte()
+
+    def in_window_context(self, hx, length, window_size=1):
+        context = list()
+        for i in range(1, window_size+1):
+            context_i = Variable(torch.zeros_like(hx))
+            for j in range(hx.size(0)):
+                if j >= i:
+                    context_i[j] = context_i[j] + hx[j-i]
+            context.append(context_i)
+        return torch.cat(context, dim=2)
 
     def forward(self, inputs, hx=None):
         seqs = inputs[0]
         seq_lens = inputs[1]
-        # shape = seqs.size()
-        # seq_mask = sequence_mask(shape, seq_lens)
 
-        # seqs = torch.mul(seqs, seq_mask)
-        h_gt_1 = hx[0][-self.num_g]
-        h_wt_1 = hx[0][:-self.num_g].mul(seq_mask)
-        c_gt_1 = hx[1][-self.num_g]
-        c_wt_1 = hx[1][:-self.num_g].mul(seq_mask)
+        seq_mask = sequence_mask(seqs.size(), seq_lens)
+        masked_seqs = seqs.masked_fill(seq_mask, 0)
+
+        h_gt_1 = hx[0][-self.num_g:]
+        h_wt_1 = hx[0][:-self.num_g,].masked_fill(seq_mask, 0)
+        c_gt_1 = hx[1][-self.num_g:]
+        c_wt_1 = hx[1][:-self.num_g, :, :].masked_fill(seq_mask, 0)
 
         # update sentence node
-        h_hat = h_wt_1.mean(dim=1)
+        h_hat = masked_wt_1.mean(dim=0)
         fg = F.sigmoid(F.linear(h_gt_1, self.s_wg) +
                        F.linear(h_hat, self.s_ug) + self.s_bg)
-        fi = F.sigmoid(F.linear(h_gt_1, self.s_wf) +
-                       F.linear(h_wt_1, self.s_uf) + self.s_bf)
-        fi = softmax_masked(fi, seq_lens)
         o = F.sigmoid(F.linear(h_gt_1, self.s_wo) +
                       F.linear(h_hat, self.s_uo) + self.s_bo)
-        gates = torch.cat((fi, fg), dim=1)
-        gates = F.softmax(gates, dim=1)
-        c_t_1 = torch.cat((c_wt_1, c_gt_1), dim=1)
-        c_gt = torch.sum(torch.mul(gates, c_t_1))
-        h_gt = torch.mul(o, F.tanh(c_gt))
+        fi = F.sigmoid(F.linear(h_gt_1, self.s_wf) +
+                       F.linear(h_wt_1, self.s_uf) +
+                       self.s_bf).masked_fill(mask, -1e25)
+        fi_normalized = F.softmax(fi, dim=0)
+
+        c_gt = fg.mul(c_gt_1).add(fi_normalized.mul(c_wt_1).sum(dim=1))
+        h_gt = o.mul(F.tanh(c_gt))
 
         # update word nodes
-        h_hat = cated_window(h_wt_1, self.window_size)
-        i = F.sigmoid(F.linear(h_hat, self.w_wi) + F.linear(seqs, self.w_ui) +
-                      F.linear(h_gt_1, self.w_vi) + self.w_bi)
-        l = F.sigmoid(F.linear(h_hat, self.w_wl) + F.linear(seqs, self.w_ul) +
-                      F.linear(h_gt_1, self.w_vl) + self.w_bl)
-        r = F.sigmoid(F.linear(h_hat, self.w_wr) + F.linear(seqs, self.w_ur) +
-                      F.linear(h_gt_1, self.w_vr) + self.w_br)
-        f = F.sigmoid(F.linear(h_hat, self.w_wf) + F.linear(seqs, self.w_uf) +
-                      F.linear(h_gt_1, self.w_vf) + self.w_bf)
-        s = F.sigmoid(F.linear(h_hat, self.w_ws) + F.linear(seqs, self.w_us) +
-                      F.linear(h_gt_1, self.w_vs) + self.w_bs)
-        o = F.sigmoid(F.linear(h_hat, self.w_wo) + F.linear(seqs, self.w_uo) +
-                      F.linear(h_gt_1, self.w_vo) + self.w_bo)
-        u = F.tanh(F.linear(h_hat, self.w_wu) + F.linear(seqs, self.w_uu) +
-                   F.linear(h_gt_1, self.w_vu) + self.w_bu)
-        gates = torch.cat((i, l, r, f, s, o, u), dim=1)
+        epsilon = 
+        # h_hat = cated_window(h_wt_1, self.window_size)
+        # i = F.sigmoid(F.linear(h_hat, self.w_wi) + F.linear(seqs, self.w_ui) +
+        #               F.linear(h_gt_1, self.w_vi) + self.w_bi)
+        # l = F.sigmoid(F.linear(h_hat, self.w_wl) + F.linear(seqs, self.w_ul) +
+        #               F.linear(h_gt_1, self.w_vl) + self.w_bl)
+        # r = F.sigmoid(F.linear(h_hat, self.w_wr) + F.linear(seqs, self.w_ur) +
+        #               F.linear(h_gt_1, self.w_vr) + self.w_br)
+        # f = F.sigmoid(F.linear(h_hat, self.w_wf) + F.linear(seqs, self.w_uf) +
+        #               F.linear(h_gt_1, self.w_vf) + self.w_bf)
+        # s = F.sigmoid(F.linear(h_hat, self.w_ws) + F.linear(seqs, self.w_us) +
+        #               F.linear(h_gt_1, self.w_vs) + self.w_bs)
+        # o = F.sigmoid(F.linear(h_hat, self.w_wo) + F.linear(seqs, self.w_uo) +
+        #               F.linear(h_gt_1, self.w_vo) + self.w_bo)
+        # u = F.tanh(F.linear(h_hat, self.w_wu) + F.linear(seqs, self.w_uu) +
+        #            F.linear(h_gt_1, self.w_vu) + self.w_bu)
+        # gates = torch.cat((i, l, r, f, s, o, u), dim=1)
         # think twice
-        gates = F.softmax(gates, dim=1)
-        c_wt = ?
-        h_wt = torch.mul(o, F.tanh(c_wt))
+        # gates = F.softmax(gates, dim=1)
+        # c_wt = ?
+        # h_wt = torch.mul(o, F.tanh(c_wt))
 
-        h_t = ?
-        c_t = ?
+        # h_t = ?
+        # c_t = ?
         return (h_t, c_t)
-
-    def sequence_mask(shape, lengths):
-        # TODO
-        pass
-
-    def softmax_masked(seq, seq_lens):
-        # TODO
-        pass
-
-    def cated_window(seqs, window_size):
-        # TODO
-        pass
 
 
 class sLSTM(nn.Module):
