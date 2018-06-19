@@ -7,7 +7,7 @@ import pickle
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.autograd.Variable as Variable
+from torch.autograd import Variable
 import torch.optim as optim
 
 
@@ -36,6 +36,7 @@ class sLSTMCell(nn.Module):
         处理bias=False, batch_first=False, 将sequence_mask
         设置成不需要self的方法，处理多个sentence node，处理多个window_size,支持更多
         初始化方法，处理dropout
+        mean with zero vectors
     """
 
     def __init__(self, input_size, hidden_size, window_size=1,
@@ -52,8 +53,6 @@ class sLSTMCell(nn.Module):
         self.dropout = dropout
         self.lens_dim = 1 if batch_first is True else 0
 
-        self.sent_w = nn.Linear(hidden_size, )
-
         self._all_gate_weights = []
         # parameters for word nodes
         word_gate_dict = dict(
@@ -64,7 +63,9 @@ class sLSTMCell(nn.Module):
 
         for (gate_name, gate_tag) in word_gate_dict.items():
             # parameters named follow original paper
-            w_w = nn.Parameter(torch.Tensor(hidden_size, 3*hidden_size))
+            # weight: (out_features, in_features)
+            w_w = nn.Parameter(torch.Tensor(hidden_size,
+                                            window_size*hidden_size))
             w_u = nn.Parameter(torch.Tensor(hidden_size, input_size))
             w_v = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
             w_b = nn.Parameter(torch.Tensor(hidden_size))
@@ -83,6 +84,7 @@ class sLSTMCell(nn.Module):
              ('output gate', 'o')])
 
         for (gate_name, gate_tag) in sentence_gate_dict.items():
+            # weight: (out_features, in_features)
             s_w = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
             s_u = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
             s_b = nn.Parameter(torch.Tensor(hidden_size))
@@ -114,15 +116,26 @@ class sLSTMCell(nn.Module):
             mask[i, :, :] = mask[i, :, :] + (i >= length).float()
         return mask.byte()
 
-    def in_window_context(self, hx, length, window_size=1):
+    def in_window_context(self, hx, length, window_size=1, average=False):
+        # average not concering padding. 0 also be averaged.
         context = list()
-        for i in range(1, window_size+1):
-            context_i = Variable(torch.zeros_like(hx))
-            for j in range(hx.size(0)):
-                if j >= i:
-                    context_i[j] = context_i[j] + hx[j-i]
+        # before
+        for i in range(window_size, 0, -1):
+            context_i = Variable(torch.zeros_like(hx.data))
+            for j in range(i, hx.size(0)):
+                context_i[j] = context_i[j] + hx[j-i]
             context.append(context_i)
-        return torch.cat(context, dim=2)
+        # origin
+        context.append(hx)
+        # after
+        for i in range(1, window_size+1):
+            context_i = Variable(torch.zeros_like(hx.data))
+            for j in range(hx.size(0)-i):
+                context_i[j] = context_i[j] + hx[j+i]
+            context.append(context_i)
+        # TODO mean with 0 vectors
+        return torch.stack(context).mean(dim=0) if average \
+            else torch.cat(context, dim=2)
 
     def forward(self, inputs, hx=None):
         seqs = inputs[0]
@@ -132,49 +145,65 @@ class sLSTMCell(nn.Module):
         masked_seqs = seqs.masked_fill(seq_mask, 0)
 
         h_gt_1 = hx[0][-self.num_g:]
-        h_wt_1 = hx[0][:-self.num_g,].masked_fill(seq_mask, 0)
+        h_wt_1 = hx[0][:-self.num_g].masked_fill(seq_mask, 0)
         c_gt_1 = hx[1][-self.num_g:]
-        c_wt_1 = hx[1][:-self.num_g, :, :].masked_fill(seq_mask, 0)
+        c_wt_1 = hx[1][:-self.num_g].masked_fill(seq_mask, 0)
 
         # update sentence node
         h_hat = masked_wt_1.mean(dim=0)
+        # TODO mean with 0 vector
         fg = F.sigmoid(F.linear(h_gt_1, self.s_wg) +
                        F.linear(h_hat, self.s_ug) + self.s_bg)
         o = F.sigmoid(F.linear(h_gt_1, self.s_wo) +
                       F.linear(h_hat, self.s_uo) + self.s_bo)
         fi = F.sigmoid(F.linear(h_gt_1, self.s_wf) +
                        F.linear(h_wt_1, self.s_uf) +
-                       self.s_bf).masked_fill(mask, -1e25)
+                       self.s_bf).masked_fill(seq_mask, -1e25)
         fi_normalized = F.softmax(fi, dim=0)
 
         c_gt = fg.mul(c_gt_1).add(fi_normalized.mul(c_wt_1).sum(dim=1))
+        c_gt = c_gt.masked_fill(seq_mask, 0)
         h_gt = o.mul(F.tanh(c_gt))
 
         # update word nodes
-        epsilon = 
-        # h_hat = cated_window(h_wt_1, self.window_size)
-        # i = F.sigmoid(F.linear(h_hat, self.w_wi) + F.linear(seqs, self.w_ui) +
-        #               F.linear(h_gt_1, self.w_vi) + self.w_bi)
-        # l = F.sigmoid(F.linear(h_hat, self.w_wl) + F.linear(seqs, self.w_ul) +
-        #               F.linear(h_gt_1, self.w_vl) + self.w_bl)
-        # r = F.sigmoid(F.linear(h_hat, self.w_wr) + F.linear(seqs, self.w_ur) +
-        #               F.linear(h_gt_1, self.w_vr) + self.w_br)
-        # f = F.sigmoid(F.linear(h_hat, self.w_wf) + F.linear(seqs, self.w_uf) +
-        #               F.linear(h_gt_1, self.w_vf) + self.w_bf)
-        # s = F.sigmoid(F.linear(h_hat, self.w_ws) + F.linear(seqs, self.w_us) +
-        #               F.linear(h_gt_1, self.w_vs) + self.w_bs)
-        # o = F.sigmoid(F.linear(h_hat, self.w_wo) + F.linear(seqs, self.w_uo) +
-        #               F.linear(h_gt_1, self.w_vo) + self.w_bo)
-        # u = F.tanh(F.linear(h_hat, self.w_wu) + F.linear(seqs, self.w_uu) +
-        #            F.linear(h_gt_1, self.w_vu) + self.w_bu)
-        # gates = torch.cat((i, l, r, f, s, o, u), dim=1)
-        # think twice
-        # gates = F.softmax(gates, dim=1)
-        # c_wt = ?
-        # h_wt = torch.mul(o, F.tanh(c_wt))
+        # TODO know only support 1 sentence node becouse of pytorch broadcating
+        epsilon = in_window_context(h_wt_1, seq_lens,
+                                    window_size=self.window_size)
+        i = F.sigmoid(F.linear(epsilon, self.w_wi) +
+                      F.linear(seqs, self.w_ui) +
+                      F.linear(h_gt_1, self.w_vi) + self.w_bi)
+        l = F.sigmoid(F.linear(epsilon, self.w_wl) +
+                      F.linear(seqs, self.w_ul) +
+                      F.linear(h_gt_1, self.w_vl) + self.w_bl)
+        r = F.sigmoid(F.linear(epsilon, self.w_wr) +
+                      F.linear(seqs, self.w_ur) +
+                      F.linear(h_gt_1, self.w_vr) + self.w_br)
+        f = F.sigmoid(F.linear(epsilon, self.w_wf) +
+                      F.linear(seqs, self.w_uf) +
+                      F.linear(h_gt_1, self.w_vf) + self.w_bf)
+        s = F.sigmoid(F.linear(epsilon, self.w_ws) +
+                      F.linear(seqs, self.w_us) +
+                      F.linear(h_gt_1, self.w_vs) + self.w_bs)
+        o = F.sigmoid(F.linear(epsilon, self.w_wo) +
+                      F.linear(seqs, self.w_uo) +
+                      F.linear(h_gt_1, self.w_vo) + self.w_bo)
+        u = F.tanh(F.linear(epsilon, self.w_wu) +
+                   F.linear(seqs, self.w_uu) +
+                   F.linear(h_gt_1, self.w_vu) + self.w_bu)
 
-        # h_t = ?
-        # c_t = ?
+        gates = torch.stack((l, f, r, s, i), dim=0)
+        gates_normalized = F.softmax(gates.masked_fill(seq_mask, -1e25), dim=0)
+
+        c_wt_l, c_wt_1, c_wt_r = \
+            in_window_context(c_wt_1, seq_lens).chunk(3, dim=2)
+        c_mergered = torch.stack((c_wt_l, c_wt_1, c_wt_r, c_gt_1, u), dim=0)
+
+        c_wt = gates_normalized.mul(c_mergered).sum(dim=0)
+        c_wt = c_wt.masked_fill(seq_mask, 0)
+        h_wt = o.mul(F.tanh(c_wt))
+
+        h_t = torch.cat((h_wt, h_gt), dim=0)
+        c_t = torch.cat((c_wt, c_gt), dim=0)
         return (h_t, c_t)
 
 
@@ -212,13 +241,21 @@ class sLSTM(nn.Module):
                               batch_first=batch_first, dropout=dropout)
 
     def forward(self, inputs, hx=None):
-        h_t = hx[0]
-        c_t = hx[1]
+        # inputs: (seqs, seq_lens)
+        if hx is None:
+            hidden_size = inputs[0].size()
+            h_t = Variable(torch.zeros(hidden_size[0]+self.sentence_nodes,
+                                       hidden_size[1],
+                                       hidden_size[2]), requires_grad=False)
+            c_t = Variable(torch.zeros_like(h_t), requires_grad=False)
+        else:
+            h_t = hx[0]
+            c_t = hx[1]
+
         for step in steps:
             h_t, c_t = self.cell(inputs, (h_t, c_t))
 
-        return h_t[:-self.sentence_nodes, :, :], \
-            h_t[-self.sentence_nodes:, :, :]
+        return h_t[:-self.sentence_nodes], h_t[-self.sentence_nodes:]
 
 
 if __name__ == "__main__":
@@ -226,6 +263,6 @@ if __name__ == "__main__":
     path = 'parsed_data/'+'apparel'+'_dataset'
     embedding_path = 'apparel'+'embedding_matrix'
 
-    cell = sLSTMcell(10, 10, 2)
+    cell = sLSTMCell(10, 10, 2)
     for param in cell._all_gate_weights:
         print(param)
