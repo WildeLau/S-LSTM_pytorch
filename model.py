@@ -21,9 +21,10 @@ class Classifier(nn.Module):
         )
 
     def forward(self, data):
+        # data: tuple of (seqs, seq_len)
         sents = self.embed(data[0])
         if self.config.fix_embed:
-            sents = Variable(sents.data)
+            sents = Variable(sents.data, requires_grad=False)
         rep = self.encoder((sents, data[1]))
         logits = self.out(rep)
         scores = F.softmax(rep, dim=-1)

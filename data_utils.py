@@ -9,8 +9,8 @@ def prepared_data(seqs, labels):
     return [np.array(seqs), labels, numpy.array(lengths).astype('int32')]
 
 
-def removed_unk(x, n_words):
-    return [[1 if w >= n_words else w for w in sen] for sen in x]
+def removed_unk(x, n_words, unk):
+    return [[unk if w >= n_words else w for w in sen] for sen in x]
 
 
 def load_data(path, n_words):

@@ -110,3 +110,4 @@ glove.*
 launch.json
 /mtl_data
 config.json
+/.vscode

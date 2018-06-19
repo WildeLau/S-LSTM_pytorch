@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 from slstm import sLSTM
+from model import Classifier
 
 
 def train_epoch(epoch, config, model, data_loader, optimizer):
@@ -35,11 +36,22 @@ def test_epoch(model, data_loader, config):
         correct += pred.eq(target.data).cpu().sum()
 
 
-def train(model, config):
-    train_loader = torch.utils.data.DataLoader()
-    test_loader = torch.utils.data.DataLoader()
-
+def train(model, config, train_data, test_data):
+    # train_data, test_data: pytorch Dataset class
     optimizer = optim.Adam(model.parameters(), lr=config.lr)
     for epoch in range(1, config.epochs + 1):
-        train_epoch(epoch, config, model, train_loader, optimizer)
-        test_epoch(model, test_loader)
+        train_epoch(epoch, config, model, train_data, optimizer)
+        test_epoch(model, test_data)
+
+
+if __name__ == '__main__':
+
+    from model import Classifier
+    from config import Config
+
+    config = Config()
+    model = Classifier(configs)
+
+    # TODO: load data
+
+    train(model, config, train_data, test_data)
