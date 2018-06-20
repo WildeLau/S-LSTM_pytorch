@@ -54,7 +54,7 @@ def train(model, config, train_data, test_data):
 class sLSTMDataset(Dataset):
     def __init__(self, data):
         super(sLSTMDataset, self).__init__()
-        self.seqs = [torch.Tensor(seq) for seq in data[0]]
+        self.seqs = [torch.LongTensor(seq) for seq in data[0]]
         self.lengths = torch.Tensor(data[1])
         self.labels = torch.Tensor(data[2])
 
