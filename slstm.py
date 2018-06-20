@@ -40,7 +40,7 @@ class sLSTMCell(nn.Module):
     """
 
     def __init__(self, input_size, hidden_size, window_size=1,
-                 sentence_nodes=1, bias=True, batch_first=False,
+                 sentence_nodes=1, bias=True, batch_first=True,
                  dropout=0, initial_mathod='orgin'):
         super(sLSTMCell, self).__init__()
         self.input_size = input_size
@@ -161,8 +161,7 @@ class sLSTMCell(nn.Module):
                        self.s_bf).masked_fill(seq_mask, -1e25)
         fi_normalized = F.softmax(fi, dim=0)
 
-        c_gt = fg.mul(c_gt_1).add(fi_normalized.mul(c_wt_1).sum(dim=1))
-        c_gt = c_gt.masked_fill(seq_mask, 0)
+        c_gt = fg.mul(c_gt_1).add(fi_normalized.mul(c_wt_1).sum(dim=0))
         h_gt = o.mul(F.tanh(c_gt))
 
         # update word nodes
@@ -196,7 +195,8 @@ class sLSTMCell(nn.Module):
 
         c_wt_l, c_wt_1, c_wt_r = \
             self.in_window_context(c_wt_1, seq_lens).chunk(3, dim=2)
-        c_mergered = torch.stack((c_wt_l, c_wt_1, c_wt_r, c_gt_1, u), dim=0)
+        c_mergered = torch.stack((c_wt_l, c_wt_1, c_wt_r,
+                                  c_gt_1.expand_as(c_wt_1.data), u), dim=0)
 
         c_wt = gates_normalized.mul(c_mergered).sum(dim=0)
         c_wt = c_wt.masked_fill(seq_mask, 0)

@@ -19,8 +19,8 @@ def train_epoch(epoch, config, model, data_loader, optimizer):
                                Variable(target)
         optimizer.zero_grad()
         output = model((data, length))
-        loss = F.nnl_loss(output, target)
-        loss.backword()
+        loss = F.nll_loss(output, target)
+        loss.backward()
         optimizer.step()
         if batch_idx % config.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -56,7 +56,7 @@ class sLSTMDataset(Dataset):
         super(sLSTMDataset, self).__init__()
         self.seqs = [torch.LongTensor(seq) for seq in data[0]]
         self.lengths = torch.Tensor(data[1])
-        self.labels = torch.Tensor(data[2])
+        self.labels = torch.LongTensor(data[2])
 
     def __len__(self):
         return len(self.labels)
