@@ -46,7 +46,7 @@ def test_epoch(model, data_loader, config):
 def train(model, config, train_data, test_data):
     # train_data, test_data: pytorch Dataset class
     optimizer = optim.Adam(model.parameters(), lr=config.lr)
-    for epoch in range(1, config.epochs + 1):
+    for epoch in range(1, config.epoch + 1):
         train_epoch(epoch, config, model, train_data, optimizer)
         test_epoch(model, test_data)
 
@@ -57,10 +57,10 @@ class sLSTMDataset(Dataset):
         self.seqs = [torch.Tensor(seq) for seq in data[0]]
         self.lengths = torch.Tensor(data[1])
         self.labels = torch.Tensor(data[2])
-    
+
     def __len__(self):
         return len(self.labels)
-    
+
     def __getitem__(self, index):
         return [self.seqs[index], self.lengths[index], self.labels[index]]
 
