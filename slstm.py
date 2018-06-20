@@ -65,7 +65,7 @@ class sLSTMCell(nn.Module):
             # parameters named follow original paper
             # weight: (out_features, in_features)
             w_w = nn.Parameter(torch.Tensor(hidden_size,
-                                            window_size*hidden_size))
+                                            (window_size*2+1)*hidden_size))
             w_u = nn.Parameter(torch.Tensor(hidden_size, input_size))
             w_v = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
             w_b = nn.Parameter(torch.Tensor(hidden_size))
