@@ -150,7 +150,7 @@ class sLSTMCell(nn.Module):
         c_wt_1 = hx[1][:-self.num_g].masked_fill(seq_mask, 0)
 
         # update sentence node
-        h_hat = masked_wt_1.mean(dim=0)
+        h_hat = h_wt_1.mean(dim=0)
         # TODO mean with 0 vector
         fg = F.sigmoid(F.linear(h_gt_1, self.s_wg) +
                        F.linear(h_hat, self.s_ug) + self.s_bg)
