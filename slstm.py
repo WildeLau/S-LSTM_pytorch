@@ -247,7 +247,7 @@ class sLSTM(nn.Module):
             h_t = Variable(torch.zeros(hidden_size[0]+self.sentence_nodes,
                                        hidden_size[1],
                                        hidden_size[2]), requires_grad=False)
-            c_t = Variable(torch.zeros_like(h_t), requires_grad=False)
+            c_t = Variable(torch.zeros_like(h_t.data), requires_grad=False)
         else:
             h_t = hx[0]
             c_t = hx[1]
