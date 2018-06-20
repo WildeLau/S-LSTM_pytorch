@@ -141,7 +141,7 @@ class sLSTMCell(nn.Module):
         seqs = inputs[0]
         seq_lens = inputs[1]
 
-        seq_mask = sequence_mask(seqs.size(), seq_lens)
+        seq_mask = self.sequence_mask(seqs.size(), seq_lens)
         masked_seqs = seqs.masked_fill(seq_mask, 0)
 
         h_gt_1 = hx[0][-self.num_g:]
@@ -167,8 +167,8 @@ class sLSTMCell(nn.Module):
 
         # update word nodes
         # TODO know only support 1 sentence node becouse of pytorch broadcating
-        epsilon = in_window_context(h_wt_1, seq_lens,
-                                    window_size=self.window_size)
+        epsilon = self.in_window_context(h_wt_1, seq_lens,
+                                         window_size=self.window_size)
         i = F.sigmoid(F.linear(epsilon, self.w_wi) +
                       F.linear(seqs, self.w_ui) +
                       F.linear(h_gt_1, self.w_vi) + self.w_bi)
@@ -195,7 +195,7 @@ class sLSTMCell(nn.Module):
         gates_normalized = F.softmax(gates.masked_fill(seq_mask, -1e25), dim=0)
 
         c_wt_l, c_wt_1, c_wt_r = \
-            in_window_context(c_wt_1, seq_lens).chunk(3, dim=2)
+            self.in_window_context(c_wt_1, seq_lens).chunk(3, dim=2)
         c_mergered = torch.stack((c_wt_l, c_wt_1, c_wt_r, c_gt_1, u), dim=0)
 
         c_wt = gates_normalized.mul(c_mergered).sum(dim=0)
