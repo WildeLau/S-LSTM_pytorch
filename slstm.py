@@ -252,7 +252,7 @@ class sLSTM(nn.Module):
             h_t = hx[0]
             c_t = hx[1]
 
-        for step in steps:
+        for step in self.steps:
             h_t, c_t = self.cell(inputs, (h_t, c_t))
 
         return h_t[:-self.sentence_nodes], h_t[-self.sentence_nodes:]
