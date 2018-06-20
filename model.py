@@ -15,8 +15,8 @@ class Classifier(nn.Module):
                                   padding_idx=config.padding_idx)
         self.encoder = slstm.sLSTM(config.d_embed, config.d_hidden)
         self.out = nn.Sequential(
-            nn.Linear(config.d_hidden, config.d_hidden*2)
-            nn.Tanh()
+            nn.Linear(config.d_hidden, config.d_hidden*2),
+            nn.Tanh(),
             nn.Linear(config.d_hidden*2, config.d_out)
         )
 
