@@ -6,7 +6,7 @@ import pickle
 def prepared_data(seqs, labels):
     lengths = [lens(s) for s in seqs]
     labels = np.array(labels).astype('int32')
-    return [np.array(seqs), labels, numpy.array(lengths).astype('int32')]
+    return [np.array(seqs), numpy.array(lengths).astype('int32'), labels]
 
 
 def removed_unk(x, n_words, unk):
@@ -23,3 +23,6 @@ def load_data(path, n_words):
     train_set_x = removed_unk(train_set_x, n_words)
     dev_set_x = removed_unk(dev_set_x, n_words)
     test_set_x = removed_unk(test_set_x, n_words)
+    return [train_set_x, train_set_y], \
+           [dev_set_x, dev_set_y], \
+           [test_set_x, test_set_y]

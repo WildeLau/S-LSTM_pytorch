@@ -86,7 +86,8 @@ def select_embedding_matrix(embedding_dict, word_dict,
             embedding_matrix.append(
                 np.random.normal(0, 0.1, demensions).tolist())
             missing += 1
-    pickle.dump(embedding_matrix, open('apparel'+'_embedding_matrix', 'wb'))
+    pickle.dump(embedding_matrix,
+                open('embedding/'+'apparel'+'_embedding_matrix', 'wb'))
     print("Total %d words are not in embedding dict." % missing)
     print(np.array(embedding_matrix).shape)
 
@@ -105,7 +106,7 @@ if __name__ == '__main__':
     # Follow the offical tensorflow implemention. I don't know why
     vocab_size = len(all_words) - 2
     common_words = dict(all_words.most_common(vocab_size))
-    print("Selec %d words as common words." % len(common_words))
+    print("Select %d words as common words." % len(common_words))
 
     counter = 2
     for key in common_words:
@@ -118,7 +119,7 @@ if __name__ == '__main__':
     pickle.dump((transformed_text, transformed_label),
                 open('parsed_data/'+'apparel'+'_dataset', 'wb'))
 
-    glove_filename = 'glove.6B.300d.txt'
+    glove_filename = 'embedding/glove.6B.300d.txt'
     glove_dict = load_glove(glove_filename, dimensions=300)
 
     select_embedding_matrix(glove_dict, common_words, start_offset=2)

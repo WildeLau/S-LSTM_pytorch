@@ -105,8 +105,7 @@ venv.bak/
 
 # my configuration
 /parsed_data
-*matrix
-glove.*
+/embedding
 launch.json
 /mtl_data
 config.json
