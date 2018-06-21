@@ -14,7 +14,7 @@ from model import Classifier
 def train_epoch(epoch, config, model, data_loader, optimizer):
     model.train()
     for batch_idx, (data, length, target) in enumerate(data_loader):
-        data, length, target = Variable(data), \
+        data, length, target = Variable(data).cuda, \
                                Variable(length).unsqueeze(dim=0).cuda(), \
                                Variable(target).cuda()
         optimizer.zero_grad()
@@ -34,9 +34,9 @@ def test_epoch(model, data_loader, config):
     test_loss = 0
     correct = 0
     for batch_idx, (data, length, target) in enumerate(data_loader):
-        data, length, target = Variable(data, volitile=True), \
-                               Variable(length).unsqueeze(dim=0), \
-                               Variable(target)
+        data, length, target = Variable(data, volitile=True).cuda(), \
+                               Variable(length).unsqueeze(dim=0).cuda(), \
+                               Variable(target).cuda()
         output = model((data, length))
         test_loss += F.nll_loss(output, target, size_average=False).data[0]
         pred = output.data.max(1)[1]
@@ -54,9 +54,9 @@ def train(model, config, train_data, test_data):
 class sLSTMDataset(Dataset):
     def __init__(self, data):
         super(sLSTMDataset, self).__init__()
-        self.seqs = [torch.LongTensor(seq).cuda() for seq in data[0]]
-        self.lengths = torch.Tensor(data[1]).cuda()
-        self.labels = torch.LongTensor(data[2]).cuda()
+        self.seqs = data[0]
+        self.lengths = data[1]
+        self.labels = data[2]
 
     def __len__(self):
         return len(self.labels)
