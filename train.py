@@ -40,7 +40,8 @@ def test_epoch(model, data_loader, config):
     # TODO
     model.eval()
     test_loss = 0
-    correct = 0
+    n_correct = 0
+
     for batch_idx, (data, length, target) in enumerate(data_loader):
         data, length, target = Variable(data, volitile=True).cuda(), \
                                Variable(length).unsqueeze(dim=1).cuda(), \
@@ -48,7 +49,10 @@ def test_epoch(model, data_loader, config):
         output = model((data, length))
         test_loss += F.nll_loss(output, target, size_average=False).data[0]
         pred = output.data.max(1)[1]
-        correct += pred.eq(target.data).cpu().sum()
+        n_correct += pred.eq(target.data).sum()
+
+    test_acc = 100 * n_correct / len(data_loader.dataset)
+    print('Test result: Loss: {:.6f} acc: {:.2f}'.format(test_loss, test_acc))
 
 
 def train(model, config, train_data, test_data):
@@ -56,7 +60,7 @@ def train(model, config, train_data, test_data):
     optimizer = optim.Adam(model.parameters(), lr=config.lr)
     for epoch in range(1, config.epoch + 1):
         train_epoch(epoch, config, model, train_data, optimizer)
-        test_epoch(model, test_data)
+        test_epoch(model, test_data, config)
 
 
 class sLSTMDataset(Dataset):
