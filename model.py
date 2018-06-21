@@ -28,5 +28,5 @@ class Classifier(nn.Module):
         sents = sents.view(-1, self.config.batch_size, self.config.d_hidden)
         _, rep = self.encoder((sents, data[1]))
         logits = self.out(rep).squeeze(0)
-        scores = F.softmax(logits, dim=-1)
+        scores = F.log_softmax(logits, dim=-1)
         return scores

@@ -6,7 +6,7 @@ class Config():
         self.max_grad_norm = 5
         self.d_hidden = 300
         self.lr_decay = 0.95
-        self.batch_size = 1
+        self.batch_size = 5
         self.lr = 0.001
         self.epoch = 40
         self.steps = 5

@@ -111,17 +111,18 @@ class sLSTMCell(nn.Module):
 
     def sequence_mask(self, size, length):
         # batch_first = False mode
-        mask = Variable(torch.zeros(size[0], size[1], 1), requires_grad=False)
+        mask = Variable(torch.zeros(size[0], size[1], 1),
+                        requires_grad=False).cuda()
         for i in range(size[0]):
             mask[i, :, :] = mask[i, :, :] + (i >= length).float()
-        return mask.byte()
+        return mask.byte().cuda()
 
     def in_window_context(self, hx, length, window_size=1, average=False):
         # average not concering padding. 0 also be averaged.
         context = list()
         # before
         for i in range(window_size, 0, -1):
-            context_i = Variable(torch.zeros_like(hx.data))
+            context_i = Variable(torch.zeros_like(hx.data)).cuda()
             for j in range(i, hx.size(0)):
                 context_i[j] = context_i[j] + hx[j-i]
             context.append(context_i)
@@ -129,7 +130,7 @@ class sLSTMCell(nn.Module):
         context.append(hx)
         # after
         for i in range(1, window_size+1):
-            context_i = Variable(torch.zeros_like(hx.data))
+            context_i = Variable(torch.zeros_like(hx.data)).cuda()
             for j in range(hx.size(0)-i):
                 context_i[j] = context_i[j] + hx[j+i]
             context.append(context_i)
@@ -246,8 +247,10 @@ class sLSTM(nn.Module):
             hidden_size = inputs[0].size()
             h_t = Variable(torch.zeros(hidden_size[0]+self.sentence_nodes,
                                        hidden_size[1],
-                                       hidden_size[2]), requires_grad=False)
-            c_t = Variable(torch.zeros_like(h_t.data), requires_grad=False)
+                                       hidden_size[2]),
+                           requires_grad=False).cuda()
+            c_t = Variable(torch.zeros_like(h_t.data),
+                           requires_grad=False).cuda()
         else:
             h_t = hx[0]
             c_t = hx[1]

@@ -15,14 +15,14 @@ def train_epoch(epoch, config, model, data_loader, optimizer):
     model.train()
     for batch_idx, (data, length, target) in enumerate(data_loader):
         data, length, target = Variable(data), \
-                               Variable(length).unsqueeze(dim=0), \
-                               Variable(target)
+                               Variable(length).unsqueeze(dim=0).cuda(), \
+                               Variable(target).cuda()
         optimizer.zero_grad()
         output = model((data, length))
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
-        if batch_idx % config.log_interval == 0:
+        if (batch_idx+1) % config.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx*len(data), len(data_loader.dataset),
                 100.*batch_idx/len(data_loader), loss.data[0]))
@@ -33,7 +33,7 @@ def test_epoch(model, data_loader, config):
     model.eval()
     test_loss = 0
     correct = 0
-    for data, target in enumerate(data_loader):
+    for batch_idx, (data, length, target) in enumerate(data_loader):
         data, length, target = Variable(data, volitile=True), \
                                Variable(length).unsqueeze(dim=0), \
                                Variable(target)
@@ -54,15 +54,37 @@ def train(model, config, train_data, test_data):
 class sLSTMDataset(Dataset):
     def __init__(self, data):
         super(sLSTMDataset, self).__init__()
-        self.seqs = [torch.LongTensor(seq) for seq in data[0]]
-        self.lengths = torch.Tensor(data[1])
-        self.labels = torch.LongTensor(data[2])
+        self.seqs = [torch.LongTensor(seq).cuda() for seq in data[0]]
+        self.lengths = torch.Tensor(data[1]).cuda()
+        self.labels = torch.LongTensor(data[2]).cuda()
 
     def __len__(self):
         return len(self.labels)
 
     def __getitem__(self, index):
         return [self.seqs[index], self.lengths[index], self.labels[index]]
+
+
+def slstm_collate(batch):
+    r"""Args:
+    batch: a list contain samples in dataset, len(batch) == batch_size
+    """
+    seqs = []
+    length = []
+    target = []
+    for sample in batch:
+        seqs.append(sample[0])
+        length.append(sample[1].item())
+        target.append(sample[2].item())
+    max_len = max(length)
+    for seq in seqs:
+        for _ in range(len(seq), max_len):
+            seq.append(1)
+    seqs = torch.Tensor(seqs).long()
+    length = torch.Tensor(length).long()
+    target = torch.Tensor(target).long()
+
+    return [seqs, length, target]
 
 
 if __name__ == '__main__':
@@ -86,12 +108,16 @@ if __name__ == '__main__':
     train_data = data_utils.prepared_data(train_data[0], train_data[1])
     test_data = data_utils.prepared_data(test_data[0], test_data[1])
     train_data = DataLoader(sLSTMDataset(train_data),
-                            batch_size=1, shuffle=True)
+                            batch_size=1, shuffle=True,
+                            collate_fn=slstm_collate)
     test_data = DataLoader(sLSTMDataset(test_data),
-                           batch_size=1, shuffle=True)
+                           batch_size=1, shuffle=True,
+                           collate_fn=slstm_collate)
 
     with open(embed_path, 'rb') as f:
         embed = np.array(pickle.load(f))
     model.embed.weight.data = torch.Tensor(embed)
+    model.cuda()
 
+    print("Training start.")
     train(model, config, train_data, test_data)
