@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.utils.data import Dataset
 import numpy as np
+import copy
 
 from slstm import sLSTM
 from model import Classifier
@@ -13,19 +14,26 @@ from model import Classifier
 
 def train_epoch(epoch, config, model, data_loader, optimizer):
     model.train()
+    n_correct = 0
+    n_total = 0
     for batch_idx, (data, length, target) in enumerate(data_loader):
-        data, length, target = Variable(data).cuda, \
-                               Variable(length).unsqueeze(dim=0).cuda(), \
+        data, length, target = Variable(data).cuda(), \
+                               Variable(length).unsqueeze(dim=1).cuda(), \
                                Variable(target).cuda()
         optimizer.zero_grad()
         output = model((data, length))
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
+
+        n_correct += (torch.max(output, 1)[1].data == target.data).sum()
+        n_total += config.batch_size
         if (batch_idx+1) % config.log_interval == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, batch_idx*len(data), len(data_loader.dataset),
-                100.*batch_idx/len(data_loader), loss.data[0]))
+            train_acc = 100 * n_correct / n_total
+            print('Train Epoch: {} [{}/{} ({:.0f}%)] Loss: {:.6f} acc: {:.2f}'
+                  .format(epoch, batch_idx*len(data), len(data_loader.dataset),
+                          100.*batch_idx/len(data_loader),
+                          loss.data[0], train_acc))
 
 
 def test_epoch(model, data_loader, config):
@@ -35,7 +43,7 @@ def test_epoch(model, data_loader, config):
     correct = 0
     for batch_idx, (data, length, target) in enumerate(data_loader):
         data, length, target = Variable(data, volitile=True).cuda(), \
-                               Variable(length).unsqueeze(dim=0).cuda(), \
+                               Variable(length).unsqueeze(dim=1).cuda(), \
                                Variable(target).cuda()
         output = model((data, length))
         test_loss += F.nll_loss(output, target, size_average=False).data[0]
@@ -73,7 +81,7 @@ def slstm_collate(batch):
     length = []
     target = []
     for sample in batch:
-        seqs.append(sample[0])
+        seqs.append(copy.copy(sample[0]))
         length.append(sample[1].item())
         target.append(sample[2].item())
     max_len = max(length)
@@ -108,10 +116,10 @@ if __name__ == '__main__':
     train_data = data_utils.prepared_data(train_data[0], train_data[1])
     test_data = data_utils.prepared_data(test_data[0], test_data[1])
     train_data = DataLoader(sLSTMDataset(train_data),
-                            batch_size=1, shuffle=True,
+                            batch_size=config.batch_size, shuffle=True,
                             collate_fn=slstm_collate)
     test_data = DataLoader(sLSTMDataset(test_data),
-                           batch_size=1, shuffle=True,
+                           batch_size=config.batch_size, shuffle=True,
                            collate_fn=slstm_collate)
 
     with open(embed_path, 'rb') as f:
