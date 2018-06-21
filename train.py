@@ -43,7 +43,7 @@ def test_epoch(model, data_loader, config):
     n_correct = 0
 
     for batch_idx, (data, length, target) in enumerate(data_loader):
-        data, length, target = Variable(data, volitile=True).cuda(), \
+        data, length, target = Variable(data, volatile=True).cuda(), \
                                Variable(length).unsqueeze(dim=1).cuda(), \
                                Variable(target).cuda()
         output = model((data, length))
