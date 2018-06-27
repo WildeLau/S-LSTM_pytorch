@@ -10,7 +10,9 @@ class Config():
         self.lr = 0.001
         self.epoch = 40
         self.steps = 5
+        self.window_size = 2
         self.fix_embed = False
         self.d_out = 2
         self.padding_idx = 1
         self.log_interval = 50
+        self.batch_fisrt = True

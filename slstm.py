@@ -111,29 +111,27 @@ class sLSTMCell(nn.Module):
 
     def sequence_mask(self, size, length):
         # batch_first = False mode
-        mask = Variable(torch.zeros(size[0], size[1], 1),
-                        requires_grad=False).cuda()
-        for i in range(size[0]):
-            mask[i, :, :] = mask[i, :, :] + (i >= length).float()
-        return mask.byte().cuda()
+        # TODO:.cuda()???
+        mask = Variable(torch.LongTensor(range(size[0])),
+                        requires_grad=False).view(size[0], 1).cuda()
+        length = length.squeeze(dim=1)
+        return (mask >= length).unsqueeze(dim=2)
 
-    def in_window_context(self, hx, length, window_size=1, average=False):
+    def in_window_context(self, hx, window_size=1, average=False):
+
+        slices = torch.unbind(hx, dim=0)
+        zeros = torch.unbind(Variable(torch.zeros_like(hx.data)), dim=0)
+
+        context_l = [torch.stack(zeros[:i] + slices[:len(slices)-i], dim=0)
+                     for i in range(window_size, 0, -1)]
+        context_l.append(hx)
+        context_r = [torch.stack(slices[i+1: len(slices)] + zeros[:i+1], dim=0)
+                     for i in range(0, window_size)]
+
+        context = context_l + context_r
         # average not concering padding. 0 also be averaged.
-        context = list()
-        # before
-        for i in range(window_size, 0, -1):
-            context_i = Variable(torch.zeros_like(hx.data)).cuda()
-            for j in range(i, hx.size(0)):
-                context_i[j] = context_i[j] + hx[j-i]
-            context.append(context_i)
-        # origin
-        context.append(hx)
-        # after
-        for i in range(1, window_size+1):
-            context_i = Variable(torch.zeros_like(hx.data)).cuda()
-            for j in range(hx.size(0)-i):
-                context_i[j] = context_i[j] + hx[j+i]
-            context.append(context_i)
+        # official method is sum left and right respectivly and concat along
+        # hidden
         # TODO mean with 0 vectors
         return torch.stack(context).mean(dim=0) if average \
             else torch.cat(context, dim=2)
@@ -167,8 +165,7 @@ class sLSTMCell(nn.Module):
 
         # update word nodes
         # TODO know only support 1 sentence node becouse of pytorch broadcating
-        epsilon = self.in_window_context(h_wt_1, seq_lens,
-                                         window_size=self.window_size)
+        epsilon = self.in_window_context(h_wt_1, window_size=self.window_size)
         i = F.sigmoid(F.linear(epsilon, self.w_wi) +
                       F.linear(seqs, self.w_ui) +
                       F.linear(h_gt_1, self.w_vi) + self.w_bi)
@@ -195,7 +192,7 @@ class sLSTMCell(nn.Module):
         gates_normalized = F.softmax(gates.masked_fill(seq_mask, -1e25), dim=0)
 
         c_wt_l, c_wt_1, c_wt_r = \
-            self.in_window_context(c_wt_1, seq_lens).chunk(3, dim=2)
+            self.in_window_context(c_wt_1).chunk(3, dim=2)
         c_mergered = torch.stack((c_wt_l, c_wt_1, c_wt_r,
                                   c_gt_1.expand_as(c_wt_1.data), u), dim=0)
 

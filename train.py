@@ -110,7 +110,6 @@ if __name__ == '__main__':
     args = get_args()
     data_path = 'parsed_data/apparel_dataset'
     embed_path = 'embedding/apparel_embedding_matrix'
-    torch.cuda.set_device(args.gpu)
     config = Config()
     model = Classifier(config)
 
@@ -121,15 +120,17 @@ if __name__ == '__main__':
     test_data = data_utils.prepared_data(test_data[0], test_data[1])
     train_data = DataLoader(sLSTMDataset(train_data),
                             batch_size=config.batch_size, shuffle=True,
-                            collate_fn=slstm_collate)
+                            collate_fn=slstm_collate, num_workers=4)
     test_data = DataLoader(sLSTMDataset(test_data),
                            batch_size=config.batch_size, shuffle=True,
-                           collate_fn=slstm_collate)
+                           collate_fn=slstm_collate, num_workers=4)
 
     with open(embed_path, 'rb') as f:
         embed = np.array(pickle.load(f))
     model.embed.weight.data = torch.Tensor(embed)
-    model.cuda()
+    if args.gpu > -1:
+        torch.cuda.set_device(args.gpu)
+        model.cuda()
 
     print("Training start.")
     train(model, config, train_data, test_data)

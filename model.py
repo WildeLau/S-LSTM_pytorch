@@ -13,7 +13,8 @@ class Classifier(nn.Module):
         self.config = config
         self.embed = nn.Embedding(config.n_embed, config.d_embed,
                                   padding_idx=config.padding_idx)
-        self.encoder = slstm.sLSTM(config.d_embed, config.d_hidden)
+        self.encoder = slstm.sLSTM(config.d_embed, config.d_hidden,
+                                   window_size=config.window_size)
         self.out = nn.Sequential(
             nn.Linear(config.d_hidden, config.d_hidden*2),
             nn.Tanh(),
@@ -25,7 +26,8 @@ class Classifier(nn.Module):
         sents = self.embed(data[0])
         if self.config.fix_embed:
             sents = Variable(sents.data, requires_grad=False)
-        sents = sents.view(-1, self.config.batch_size, self.config.d_hidden)
+        if self.config.batch_fisrt is True:
+            sents = sents.permute(1, 0, 2)
         _, rep = self.encoder((sents, data[1]))
         logits = self.out(rep).squeeze(0)
         scores = F.log_softmax(logits, dim=-1)
